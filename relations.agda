@@ -1,8 +1,9 @@
 module relations where
 
 import Relation.Binary.PropositionalEquality as Eq
-open Eq using (_≡_; refl; cong)
-open import Data.Nat using (ℕ; zero; suc; _+_)
+open Eq using (_≡_; refl; cong; sym)
+open Eq.≡-Reasoning using (begin_; _≡⟨⟩_; step-≡; _∎)
+open import Data.Nat using (ℕ; zero; suc; _+_; _*_)
 open import Data.Nat.Properties using (+-comm; +-identityʳ)
 
 data _≤_ : ℕ → ℕ → Set where
@@ -110,7 +111,6 @@ trichotomy (suc m) (suc n) = helper (trichotomy m n)
 +-monoᵣ-< zero p q p<q = p<q
 +-monoᵣ-< (suc n) p q p<q = s<s (+-monoᵣ-< n p q p<q)
 
--- 这个瞬间，暴露了自己在 rewrite 那部分翘课的事实
 +-monoₗ-< : ∀ (m n p : ℕ) → m < n → m + p < n + p
 +-monoₗ-< m n p m<n rewrite +-comm m p | +-comm n p = +-monoᵣ-< p m n m<n
 
@@ -121,10 +121,102 @@ trichotomy (suc m) (suc n) = helper (trichotomy m n)
 ≤-iff-< zero (suc n) (s≤s m≤n) = z<s
 ≤-iff-< (suc m) (suc n) (s≤s m≤n) = s<s (≤-iff-< m n m≤n)
 
-<-iff-<= : ∀ (m n : ℕ) → m < suc n → m ≤ n
-<-iff-<= zero n m<n = z≤n
-<-iff-<= (suc m) (suc n) (s<s m<n) = s≤s (<-iff-<= m n m<n)
+<-iff-≤ : ∀ (m n : ℕ) → m < suc n → m ≤ n
+<-iff-≤ zero n m<n = z≤n
+<-iff-≤ (suc m) (suc n) (s<s m<n) = s≤s (<-iff-≤ m n m<n)
 
-<-trans-revisited : ∀ {m n p : ℕ} → m < n → n < p → m < p
-<-trans-revisited {zero} {suc n} {suc p} (z<s {n}) (s<s {n} {p} n<p)= z<s
-<-trans-revisited {suc m} {suc n} {suc p} (s<s m<n) (s<s n<p) = {!!}
+-- Still not finished
+-- <-trans-revisited : ∀ {m n p : ℕ} → m < n → n < p → m < p
+
+data even : ℕ → Set
+data odd : ℕ → Set
+
+data even where
+  zero : even zero
+  suc : ∀ {n : ℕ} → odd n → even (suc n)
+
+data odd where
+  suc : ∀ {n : ℕ} → even n → odd (suc n)
+
+e+e≡e : ∀ {m n : ℕ} → even m → even n → even (m + n)
+o+e≡o : ∀ {m n : ℕ} → odd m → even n → odd (m + n)
+e+o≡o : ∀ {m n : ℕ} → even m → odd n → odd (m + n)
+
+e+e≡e zero n = n
+e+e≡e (suc om) en = suc (o+e≡o om en)
+o+e≡o (suc em) en = suc (e+e≡e em en)
+e+o≡o {m} {n} em en rewrite +-comm m n = o+e≡o en em
+
+postulate
+  lemma₀ : ∀ (m n : ℕ) → m + suc n ≡ suc (m + n)
+
+o+o≡e : ∀ {m n : ℕ} → odd m → odd n → even (m + n)
+o+o≡e {m} {suc n} om (suc en) rewrite lemma₀ m n = suc (o+e≡o om en)
+
+o+o≡e' : ∀ {m n : ℕ} → odd m → odd n → even (m + n)
+o+o≡e' {suc m} {n} (suc om) en = suc (e+o≡o om en)
+
+data Bin : Set where
+  ⟨⟩ : Bin
+  _O : Bin → Bin
+  _I : Bin → Bin
+
+inc : Bin → Bin
+inc ⟨⟩ = ⟨⟩ I
+inc (x O) = x I
+inc (x I) = (inc x) O
+
+toBin : ℕ → Bin
+toBin 0 = ⟨⟩
+toBin (suc n) = inc (toBin n)
+
+fromBin : Bin → ℕ
+fromBin ⟨⟩ = 0
+fromBin (x O) = (fromBin x) * 2
+fromBin (x I) = ((fromBin x) * 2) + 1
+
+data Can : Bin → Set where
+  zero : Can ⟨⟩
+  csuc : ∀ {b : Bin} → Can b → Can (inc b)
+
+proof₁ : ∀ {n : ℕ} → Can (toBin n)
+proof₁ {zero} = zero
+proof₁ {suc n} = csuc {toBin n} (proof₁ {n})
+
+lemma₁ : ∀ {n : ℕ} → n + 1 ≡ suc n
+lemma₁ {zero} = refl
+lemma₁ {suc n} = begin (suc n) + 1 ≡⟨⟩ suc (n + 1) ≡⟨ cong suc (lemma₁ {n}) ⟩ suc (suc n) ∎
+
+lemma₂ : ∀ {b : Bin} → fromBin (inc b) ≡ suc (fromBin b)
+lemma₂ {⟨⟩} = refl
+lemma₂ {b O} = begin
+  fromBin (inc (b O))
+ ≡⟨⟩ fromBin b * 2 + 1
+ ≡⟨ lemma₁ {fromBin b * 2} ⟩ suc (fromBin b * 2) ∎
+lemma₂ {b I} = begin
+  fromBin (inc (b I))
+ ≡⟨⟩ fromBin (inc b) * 2
+ ≡⟨ cong (λ x → x * 2) (lemma₂ {b})⟩ suc (suc (fromBin b * 2))
+ ≡⟨ cong suc (sym (lemma₂ {b O}))⟩ suc (fromBin b * 2 + 1) ∎
+
+lemma₃ : ∀ {n : ℕ} → inc (toBin n) ≡ toBin (suc n)
+lemma₃ {n} = refl
+
+proof₂ : ∀ {b : Bin} → Can b → toBin (fromBin b) ≡ b
+proof₂ {_} zero = refl
+proof₂ {b = .(inc ⟨⟩)} (csuc {⟨⟩} can-b₁) = refl
+proof₂ {b = .(inc (b₁ O))} (csuc {b₁ O} can-b₁) = begin
+  toBin (fromBin (inc (b₁ O)))
+ ≡⟨⟩ toBin (fromBin b₁ * 2 + 1)
+ ≡⟨ cong toBin (lemma₁ {(fromBin b₁) * 2}) ⟩ toBin (suc (fromBin b₁ * 2))
+ ≡⟨⟩ inc (toBin (fromBin b₁ * 2))
+ ≡⟨ cong inc (proof₂ {b₁ O} can-b₁)⟩ (b₁ I)
+ ≡⟨⟩ (b₁ I) ∎
+proof₂ {b = .(inc (b₁ I))} (csuc {b₁ I} can-b₁) = begin
+  toBin (fromBin (inc (b₁ I)))
+ ≡⟨⟩ toBin (fromBin ((inc b₁) O))
+ ≡⟨⟩ toBin ((fromBin (inc b₁)) * 2)
+ ≡⟨ cong (λ x → toBin (x * 2)) (lemma₂ {b₁}) ⟩ inc (inc (toBin (fromBin b₁ * 2)))
+ ≡⟨⟩ inc (toBin (suc (fromBin b₁ * 2)))
+ ≡⟨ cong (λ x → inc (toBin x)) (sym (lemma₂ {b₁ O})) ⟩ inc (toBin (fromBin (b₁ I)))
+ ≡⟨ cong inc (proof₂ {b₁ I} can-b₁) ⟩ (inc b₁ O) ∎
